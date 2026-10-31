@@ -1,0 +1,172 @@
+const DEVICE_KEY = "mibrahim";
+
+const PAGE = `<!doctype html><html><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Light Control</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{background:#0b0f14;font-family:system-ui,-apple-system,sans-serif;color:#e6edf3;overflow:hidden}
+.bg{position:fixed;inset:0;overflow:hidden;z-index:0}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:.55;animation:float 12s ease-in-out infinite}
+.o1{width:340px;height:340px;background:#12c28b;top:-80px;left:-80px}
+.o2{width:300px;height:300px;background:#4f6bff;bottom:-80px;right:-60px;animation-delay:-4s}
+.o3{width:220px;height:220px;background:#c04bff;top:45%;left:55%;animation-delay:-8s;opacity:.35}
+@keyframes float{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(40px,-50px) scale(1.15)}}
+#intro{position:fixed;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;transition:opacity .9s ease,transform .9s ease;cursor:pointer}
+#intro.hide{opacity:0;transform:scale(1.08);pointer-events:none}
+#t1{font-size:clamp(44px,12vw,84px);font-weight:800;margin:0;background:linear-gradient(90deg,#12c28b,#4f6bff,#c04bff,#12c28b);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:grad 4s linear infinite,rise 1s cubic-bezier(.2,.8,.2,1) both}
+@keyframes grad{to{background-position:300% 0}}
+@keyframes rise{from{opacity:0;transform:translateY(30px) scale(.9)}to{opacity:1;transform:none}}
+#t2{font-size:clamp(22px,6vw,34px);margin:18px 0 0;min-height:44px;color:#c9d4df;font-weight:500}
+#t2::after{content:"";display:inline-block;width:3px;height:1em;background:#12c28b;margin-left:4px;vertical-align:-3px;animation:blink .8s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.skip{position:absolute;bottom:28px;font-size:13px;color:#8b98a5;animation:rise 1s 1s both}
+#mute{position:fixed;top:14px;right:14px;z-index:10;width:44px;height:44px;border-radius:50%;border:1px solid #ffffff22;background:#171d25cc;color:#fff;font-size:20px;cursor:pointer}
+#main{position:fixed;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none}
+#main.show{opacity:1;pointer-events:auto}
+.card{width:90%;max-width:360px;background:#171d25cc;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid #ffffff14;border-radius:24px;padding:30px;text-align:center;box-shadow:0 20px 60px #000a;transform:translateY(40px) scale(.95);opacity:0;transition:all .9s cubic-bezier(.2,.8,.2,1)}
+#main.show .card{transform:none;opacity:1}
+h1{margin:0 0 4px;font-size:24px}
+.sub{color:#8b98a5;font-size:13px;margin-bottom:22px}
+.bulb{font-size:72px;display:inline-block;margin-bottom:18px;filter:grayscale(1) brightness(.6);transition:all .5s}
+.bulb.lit{filter:none;text-shadow:0 0 40px #ffd54a;animation:glow 2s ease-in-out infinite}
+@keyframes glow{50%{transform:scale(1.08)}}
+.row{display:flex;gap:12px}
+.btn{flex:1;padding:22px 0;border-radius:16px;border:0;font-size:18px;font-weight:700;color:#fff;cursor:pointer;transition:transform .15s}
+.btn:active{transform:scale(.94)}
+.on{background:linear-gradient(145deg,#12c28b,#0a8f68);box-shadow:0 0 30px #12c28b55}
+.off{background:linear-gradient(145deg,#e5484d,#b02a30);box-shadow:0 0 30px #e5484d44}
+#s{margin-top:20px;min-height:20px;font-size:14px}
+.ok{color:#12c28b}.err{color:#ff6b5b}
+</style></head><body>
+<div class=bg><div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div></div>
+<button id=mute onclick="toggleMute()">🔊</button>
+
+<div id=intro>
+  <h1 id=t1>Hello 👋</h1>
+  <h2 id=t2></h2>
+  <div class=skip>tap for sound 🔊</div>
+</div>
+
+<div id=main><div class=card>
+  <div id=bulb class=bulb>💡</div>
+  <h1>Light Control</h1><div class=sub>Remote switch</div>
+  <div class=row>
+    <button class="btn on" onclick="go('on')">Light ON</button>
+    <button class="btn off" onclick="go('off')">Light OFF</button>
+  </div>
+  <div id=s></div>
+</div></div>
+
+<script>
+var intro=document.getElementById('intro'),main=document.getElementById('main'),
+t2=document.getElementById('t2'),s=document.getElementById('s'),
+bulb=document.getElementById('bulb'),muteBtn=document.getElementById('mute');
+var done=false,muted=false,AC=null;
+
+/* ---------- sound ---------- */
+function ctx(){
+  if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}
+  if(AC&&AC.state==='suspended'){try{AC.resume()}catch(e){}}
+  return AC;
+}
+function tone(f,d,type,vol,when){
+  if(muted)return;
+  var c=ctx();if(!c||c.state!=='running')return;
+  var o=c.createOscillator(),g=c.createGain(),t=c.currentTime+(when||0);
+  o.type=type||'sine';
+  o.frequency.setValueAtTime(f,t);
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(vol||0.15,t+0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g);g.connect(c.destination);
+  o.start(t);o.stop(t+d+0.02);
+}
+function tick(){tone(900+Math.random()*250,0.05,'square',0.04)}
+function chime(){tone(523,0.3,'sine',0.16,0);tone(659,0.3,'sine',0.16,0.13);tone(784,0.5,'sine',0.16,0.26)}
+function sOn(){tone(520,0.12,'triangle',0.2,0);tone(780,0.25,'triangle',0.2,0.1)}
+function sOff(){tone(780,0.12,'triangle',0.2,0);tone(420,0.28,'triangle',0.2,0.1)}
+function sErr(){tone(200,0.3,'sawtooth',0.12,0)}
+function speak(t){
+  if(muted)return;
+  try{var u=new SpeechSynthesisUtterance(t);u.rate=1;u.pitch=1;speechSynthesis.cancel();speechSynthesis.speak(u)}catch(e){}
+}
+function toggleMute(){
+  muted=!muted;
+  muteBtn.textContent=muted?'🔇':'🔊';
+  if(muted){try{speechSynthesis.cancel()}catch(e){}}
+  else{ctx();tone(660,0.1,'sine',0.15)}
+}
+
+/* ---------- intro ---------- */
+function enter(){
+  if(done)return;done=true;
+  intro.classList.add('hide');
+  chime();
+  setTimeout(function(){main.classList.add('show')},350);
+  setTimeout(function(){intro.style.display='none'},1000);
+}
+intro.addEventListener('click',function(){
+  if(done)return;
+  ctx();
+  speak('Hello, how are you?');
+  enter();
+});
+var msg='How are you?',i=0;
+setTimeout(function type(){
+  if(done)return;
+  if(i<msg.length){t2.textContent+=msg[i++];tick();setTimeout(type,70)}
+  else setTimeout(enter,2500);
+},1300);
+
+/* ---------- control ---------- */
+async function go(a){
+  ctx();
+  s.className='';s.textContent='Sending...';
+  try{
+    var r=await fetch('/api/cmd',{method:'POST',body:JSON.stringify({action:a})});
+    var t=await r.text();
+    s.className=r.ok?'ok':'err';s.textContent=t;
+    if(r.ok){
+      if(a==='on'){bulb.classList.add('lit');sOn()}
+      else{bulb.classList.remove('lit');sOff()}
+      if(navigator.vibrate)navigator.vibrate(40);
+    }else{sErr()}
+  }catch(e){s.className='err';s.textContent='Network error';sErr()}
+}
+</script></body></html>`;
+
+export default {
+  async fetch(req, env) {
+    try {
+      if (!env.KV) return new Response("KV binding missing: add variable name KV in Settings > Bindings", { status: 500 });
+      const url = new URL(req.url);
+
+      if (url.pathname === "/api/poll") {
+        if (url.searchParams.get("key") !== DEVICE_KEY)
+          return new Response("no", { status: 401 });
+        const raw = await env.KV.get("light_cmd");
+        if (!raw) return new Response("0|none");
+        const c = JSON.parse(raw);
+        if (Date.now() - c.ts > 30000) return new Response(c.id + "|none");
+        return new Response(c.id + "|" + c.action);
+      }
+
+      if (url.pathname === "/api/cmd" && req.method === "POST") {
+        const b = await req.json().catch(() => ({}));
+        if (!["on", "off"].includes(b.action)) return new Response("Bad action", { status: 400 });
+        const raw = await env.KV.get("light_cmd");
+        if (raw && Date.now() - JSON.parse(raw).ts < 3000)
+          return new Response("Wait 3 seconds", { status: 429 });
+        const now = Date.now();
+        await env.KV.put("light_cmd", JSON.stringify({ id: String(now), action: b.action, ts: now }));
+        return new Response(b.action === "on" ? "Light ON sent ✔" : "Light OFF sent ✔");
+      }
+
+      return new Response(PAGE, { headers: { "content-type": "text/html;charset=utf-8" } });
+    } catch (e) {
+      return new Response("Error: " + e.message, { status: 500 });
+    }
+  },
+};
